@@ -5,6 +5,7 @@ import requests
 import json
 import time
 import plotly.express as px
+import plotly.graph_objects as go
 from shiny import render, ui, App, reactive
 from shinywidgets import output_widget, render_widget
 import shinyswatch
@@ -38,11 +39,10 @@ restaurants = df.name.unique()
 # Create a dict of restaurants
 restaurants_dict = {restaurant: restaurant for restaurant in restaurants}
 
-# Add an "None" option to the categories
-restaurants_dict["None"] = "None"
 
 # App UI
 app_ui = ui.page_fluid(
+    shinyswatch.theme.cerulean(),
     ui.panel_title(
         "DC Restaurant Grid",
         window_title="DC Restaurant Grid",
@@ -92,8 +92,40 @@ app_ui = ui.page_fluid(
                 multiple=True,
             ),
             ui.input_action_button(id="refresh", label="Refresh", class_="btn-success"),
+            ui.input_switch(id="dt_switch", label="Show Data Table"),
         ),
         output_widget("grid"),
+        ui.panel_conditional(
+            "input.dt_switch",
+            ui.output_data_frame("data_table"),
+        ),
+    ),
+    ui.panel_well(
+        "Created by ",
+        ui.a(
+            "Austin Barish",
+            href="https://github.com/austinbarish",
+            target="_blank",
+        ),
+        ". Check out the code on ",
+        ui.a(
+            "Github",
+            href="https://github.com/austinbarish/food-grid",
+            target="_blank",
+        ),
+        ". Data collected using ",
+        ui.a(
+            "Google Maps",
+            href="https://developers.google.com/maps",
+            target="_blank",
+        ),
+        " and ",
+        ui.a(
+            "Yelp",
+            href="https://www.yelp.com/developers",
+            target="_blank",
+        ),
+        ". Last updated: January 2024.",
     ),
 )
 
@@ -127,9 +159,6 @@ def data_filterer(
     if "All Categories" not in main_category:
         df = df[df.main_category.isin(main_category)]
 
-        # if categories != ["All Categories"]:
-        #     df = df[df.categories.explode().isin(categories)]
-
     return df
 
 
@@ -142,7 +171,7 @@ def create_grid(
     prices=["$", "$$", "$$$", "$$$$"],
     main_category=["All Categories"],
     # categories=["All Categories"],
-    highlighted_restaurants="None",
+    highlighted_restaurants=[],
 ):
     # Filter the data
     df = data_filterer(
@@ -153,6 +182,28 @@ def create_grid(
         main_category,
         # categories=input.categories(),
     )
+
+    # Check to make sure there are restaurants left
+    if len(df) == 0:
+        draft_template = go.layout.Template()
+        draft_template.layout.annotations = [
+            dict(
+                name="draft watermark",
+                text="No Restaurants Found<br>Please Try Adjusting Filters",
+                opacity=0.4,
+                font=dict(color="red", size=50),
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+            )
+        ]
+
+        fig = go.Figure()
+        fig.update_layout(template=draft_template)
+        return fig
+
     # Find averages for quadrant lines
     x_avg = df["normalized_rating"].mean()
     y_avg = df["normalized_total_reviews"].mean()
@@ -204,15 +255,15 @@ def create_grid(
                 "average_rating",
                 "rounded_normalized_rating",
                 "total_reviews",
+                "url",
             ],
-            title="DC Restaurant Grid",
             labels={"main_category": "Category"},
             # text='name'
         )
 
     # Update the hover template to include only 'name' and 'price'
     fig.update_traces(
-        hovertemplate="<b>%{hovertext}</b><br>Price: %{customdata[1]}<br>Rating: %{customdata[2]:.2f}<br>Normalized Rating: %{customdata[3]}<br>Review Count: %{customdata[4]:,}"
+        hovertemplate="<b><a href='%{customdata[5]}' style='text-decoration: underline; color: inherit;'>%{hovertext}</a></b><br>Price: %{customdata[1]}<br>Rating: %{customdata[2]:.2f}<br>Normalized Rating: %{customdata[3]}<br>Review Count: %{customdata[4]:,}"
     )
 
     # Add quadrant Lines
@@ -244,22 +295,7 @@ def create_grid(
     #             }
     #         ]
 
-    # # Add the dropdown menu
-    # fig.update_layout(
-    #     updatemenus=[
-    #         {
-    #             "buttons": category_options,
-    #             "direction": "down",
-    #             "showactive": True,
-    #             "x": 1.05,
-    #             "xanchor": "left",
-    #             "y": 0.45,
-    #             "yanchor": "top",
-    #         }
-    #     ]
-    # )
-
-    # Find midpoints for quadrant usin
+    # Find midpoints for quadrants
     x_75 = max(df["normalized_rating"]) * 0.9
     x_25 = min(df["normalized_rating"]) * 1.1
     y_75 = max(df["normalized_total_reviews"]) * 0.9
@@ -276,8 +312,8 @@ def create_grid(
         template="plotly_white",
         xaxis_title="<b>Normalized Rating</b>",
         yaxis_title="<b>Popularity Score</b>  <br>Normalized Review Count",
-        height=500,  # Set the height
-        width=1000,  # Set the width
+        height=700,
+        width=1000,
     )
 
     # Return the plot
@@ -305,6 +341,61 @@ def server(input, output, session):
             highlighted_restaurants=input.restaurant_highlighter(),
         )
         return fig
+
+    # Create Data Table
+    @render.data_frame
+    @reactive.event(input.refresh, ignore_none=False)
+    def data_table():
+        # Filter the data
+        df_filtered = data_filterer(
+            df,
+            rating_range=input.rating_range(),
+            review_range=input.review_count_range(),
+            prices=input.price(),
+            main_category=input.main_category(),
+            # categories=input.categories(),
+        )
+
+        # Only include highlighted restaurants if they are selected
+        if list(input.restaurant_highlighter()) != []:
+            df_filtered = df_filtered[
+                df_filtered.name.isin(input.restaurant_highlighter())
+            ]
+
+        # Select Columns
+        df_filtered = df_filtered[
+            [
+                "name",
+                "main_category",
+                "categories",
+                "price",
+                "average_rating",
+                "rounded_normalized_rating",
+                "total_reviews",
+                "rounded_normalized_total_reviews",
+            ]
+        ]
+
+        # Remove underscores
+        df_filtered.columns = [col.replace("_", " ") for col in df_filtered.columns]
+
+        # Capitalize Column names
+        df_filtered.columns = [col.title() for col in df_filtered.columns]
+
+        # Remove the word "Rounded"
+        df_filtered.columns = [
+            col.replace("Rounded ", "") for col in df_filtered.columns
+        ]
+
+        # Add space between commas in categories
+        df_filtered["Categories"] = df_filtered["Categories"].str.join(", ")
+
+        # Sort by normalized rating, normalized review count
+        df_filtered = df_filtered.sort_values(
+            by=["Normalized Rating", "Normalized Total Reviews"], ascending=False
+        )
+
+        return df_filtered
 
 
 # Create the app
