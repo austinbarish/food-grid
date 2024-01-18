@@ -17,6 +17,11 @@ df = pd.read_csv(
     converters={"categories": literal_eval},
 )
 
+# Create Color Map
+# Done outside the function to remain consistent
+colors = px.colors.qualitative.Alphabet
+color_map = {cat: colors[i] for i, cat in enumerate(df.main_category.unique())}
+
 # Create a dict of all the categories
 categories = {cat: cat for cat in df.categories.explode().unique()}
 
@@ -26,6 +31,15 @@ main_categories = {cat: cat for cat in df.main_category.unique()}
 # Add an "All" option to the categories
 categories["All Categories"] = "All Categories"
 main_categories["All Categories"] = "All Categories"
+
+# Get all restaurants
+restaurants = df.name.unique()
+
+# Create a dict of restaurants
+restaurants_dict = {restaurant: restaurant for restaurant in restaurants}
+
+# Add an "None" option to the categories
+restaurants_dict["None"] = "None"
 
 # App UI
 app_ui = ui.page_fluid(
@@ -71,6 +85,12 @@ app_ui = ui.page_fluid(
             #     multiple=True,
             #     selected="All Categories",
             # ),
+            ui.input_selectize(
+                "restaurant_highlighter",
+                "Highlight Restaurant(s)",
+                choices=restaurants_dict,
+                multiple=True,
+            ),
             ui.input_action_button(id="refresh", label="Refresh", class_="btn-success"),
         ),
         output_widget("grid"),
@@ -78,8 +98,8 @@ app_ui = ui.page_fluid(
 )
 
 
-# Function to create plot
-def create_grid(
+# Function that filters data given filters
+def data_filterer(
     df,
     rating_range=[0, 100],
     review_range=[0, 100],
@@ -107,31 +127,88 @@ def create_grid(
     if "All Categories" not in main_category:
         df = df[df.main_category.isin(main_category)]
 
-    # if categories != ["All Categories"]:
-    #     df = df[df.categories.explode().isin(categories)]
+        # if categories != ["All Categories"]:
+        #     df = df[df.categories.explode().isin(categories)]
 
+    return df
+
+
+# Function to create plot
+def create_grid(
+    df,
+    color_map=color_map,
+    rating_range=[0, 100],
+    review_range=[0, 100],
+    prices=["$", "$$", "$$$", "$$$$"],
+    main_category=["All Categories"],
+    # categories=["All Categories"],
+    highlighted_restaurants="None",
+):
+    # Filter the data
+    df = data_filterer(
+        df,
+        rating_range,
+        review_range,
+        prices,
+        main_category,
+        # categories=input.categories(),
+    )
     # Find averages for quadrant lines
     x_avg = df["normalized_rating"].mean()
     y_avg = df["normalized_total_reviews"].mean()
 
-    # Create Scatter
-    fig = px.scatter(
-        df,
-        x="normalized_rating",
-        y="normalized_total_reviews",
-        color="main_category",
-        hover_name="name",
-        custom_data=[
-            "name",
-            "price",
-            "average_rating",
-            "rounded_normalized_rating",
-            "total_reviews",
-        ],
-        title="DC Restaurant Grid",
-        labels={"main_category": "Category"},
-        # text='name'
-    )
+    # Check if highlighted restaurants is empty
+    if list(highlighted_restaurants) != []:
+        # Create Color Map for Highlighted Restaurants
+        df["Highlighted"] = [
+            name if name in highlighted_restaurants else "Other" for name in df.name
+        ]
+        highlighted_color_map = {
+            name: "red" for name in enumerate(df.Highlighted.unique())
+        }
+
+        # Change Other to Gray
+        highlighted_color_map["Other"] = "gray"
+
+        # Create Scatter
+        fig = px.scatter(
+            df,
+            x="normalized_rating",
+            y="normalized_total_reviews",
+            color="Highlighted",
+            color_discrete_map=highlighted_color_map,
+            hover_name="name",
+            custom_data=[
+                "name",
+                "price",
+                "average_rating",
+                "rounded_normalized_rating",
+                "total_reviews",
+            ],
+            title="DC Restaurant Grid",
+            labels={"main_category": "Category"},
+            # text='name'
+        )
+    else:
+        # Create Scatter
+        fig = px.scatter(
+            df,
+            x="normalized_rating",
+            y="normalized_total_reviews",
+            color="main_category",
+            color_discrete_map=color_map,
+            hover_name="name",
+            custom_data=[
+                "name",
+                "price",
+                "average_rating",
+                "rounded_normalized_rating",
+                "total_reviews",
+            ],
+            title="DC Restaurant Grid",
+            labels={"main_category": "Category"},
+            # text='name'
+        )
 
     # Update the hover template to include only 'name' and 'price'
     fig.update_traces(
@@ -216,13 +293,16 @@ def server(input, output, session):
     @render_widget
     @reactive.event(input.refresh, ignore_none=False)
     def grid():
+        # Create the plot
         fig = create_grid(
             df,
+            color_map=color_map,
             rating_range=input.rating_range(),
             review_range=input.review_count_range(),
             prices=input.price(),
             main_category=input.main_category(),
             # categories=input.categories(),
+            highlighted_restaurants=input.restaurant_highlighter(),
         )
         return fig
 
