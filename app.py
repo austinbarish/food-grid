@@ -46,6 +46,11 @@ restaurants_dict = {restaurant: restaurant for restaurant in restaurants}
 # App UI
 app_ui = ui.page_fluid(
     shinyswatch.theme.pulse(),
+    ui.tags.head(
+        ui.HTML(
+            "<script async src='https://www.googletagmanager.com/gtag/js?id=G-7W30E7JTR7'></script><script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', 'G-7W30E7JTR7');</script>"
+        )
+    ),
     ui.panel_title(
         "DC Restaurant Grid",
         window_title="DC Restaurant Grid",
@@ -385,10 +390,11 @@ def create_grid(
     fig.add_hline(y=y_avg, line_width=1, opacity=0.5)
 
     # Find midpoints for quadrants
+    # Not actual 75th and 25th percentiles; modified for better visualization
     x_75 = max(df["normalized_rating"]) * 0.9
-    x_25 = min(df["normalized_rating"]) * 1.1
-    y_75 = max(df["normalized_total_reviews"]) * 0.9
-    y_25 = min(df["normalized_total_reviews"]) * 1.1
+    x_25 = (min(df["normalized_rating"]) + 10) * 2
+    y_75 = max(df["normalized_total_reviews"]) * 0.75
+    y_25 = min(df["normalized_total_reviews"])
 
     # Add quadrant text
     fig.add_annotation(x=x_75, y=y_75, text="Deservedly Popular", showarrow=False)
