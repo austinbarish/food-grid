@@ -20,14 +20,11 @@ All of the data is stored on [Github](./data/dc_reviews_cleaned.csv).
 
 I have included a metric title "Score" that seeks to combine popularity and rating into one number. The formula is as follows:
 
-$\text{df["score"]} = \left(\text{df["normalized\_rating"]} \times 10\right) \times \left(\frac{\text{df["normalized\_total\_reviews"]}}{100}\right)$
+$\text{df["score"]} = \left(\text{df["normalized rating"]} \times 10\right) \times \left(\frac{\text{df["normalized total reviews"]}}{100}\right)$
 
-$\text{df["score"]} = \begin{cases} 
-0 & \text{if } \text{df["score"]} = 0 \\
-\ln(\text{df["score"]} + 1) & \text{otherwise}
-\end{cases}$
+$\text{df["score"]} = \begin{cases} 0 & \text{if } \text{df["score"]} = 0 \\\ln(\text{df["score"]} + 1) & \text{otherwise} \end{cases}$
 
-$\text{df["score"]} = \text{scaler.fit\_transform(df["score"])} \times 100$
+$\text{df["score"]} = \text{scaler.fit(df["score"])} \times 100$
 
 $\text{df["score"]} = \text{df["score"].round(2)}$
 
