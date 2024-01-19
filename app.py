@@ -11,6 +11,8 @@ from shiny import render, ui, App, reactive
 from shinywidgets import output_widget, render_widget
 import shinyswatch
 from ast import literal_eval
+from sklearn.preprocessing import MinMaxScaler
+import math
 
 # Import Data
 df = pd.read_csv(
@@ -173,9 +175,6 @@ def data_filterer(
         # Sort by main category so it is alphabetical
         df = df.sort_values(by=["main_category"])
 
-        from sklearn.preprocessing import MinMaxScaler
-        import math
-
         # Calculate raw score
         df["score"] = (df["normalized_rating"] * 10) * (
             df["normalized_total_reviews"] / 100
@@ -287,6 +286,8 @@ def create_grid(
                 "average_rating",
                 "rounded_normalized_rating",
                 "total_reviews",
+                "url",
+                "score",
             ],
             title="DC Restaurant Grid",
             labels={"Highlighted": "Highlighted Restaurants"},
@@ -385,22 +386,37 @@ def create_grid(
         hovertemplate="<b>%{hovertext}</b><br>Price: %{customdata[1]}<br>Rating: %{customdata[2]:.2f}<br>Normalized Rating: %{customdata[3]}<br>Review Count: %{customdata[4]:,}<br>Score: %{customdata[6]:.2f}"
     )
 
-    # Add quadrant Lines
-    fig.add_vline(x=x_avg, line_width=1, opacity=0.5)
-    fig.add_hline(y=y_avg, line_width=1, opacity=0.5)
+    # Add quadrant lines and text if there are enough restaurants
+    if len(df) > 4:
+        # Add quadrant Lines
+        fig.add_vline(x=x_avg, line_width=1, opacity=0.5)
+        fig.add_hline(y=y_avg, line_width=1, opacity=0.5)
 
-    # Find midpoints for quadrants
-    # Not actual 75th and 25th percentiles; modified for better visualization
-    x_75 = max(df["normalized_rating"]) * 0.9
-    x_25 = (min(df["normalized_rating"]) + 10) * 2
-    y_75 = max(df["normalized_total_reviews"]) * 0.75
-    y_25 = min(df["normalized_total_reviews"])
+        # Find midpoints for quadrants
+        # Not actual 75th and 25th percentiles; modified for better visualization
+        x_75 = (
+            np.mean(df["normalized_rating"])
+            + (max(df["normalized_rating"]) - np.mean(df["normalized_rating"])) / 2
+        )
+        if min(df["normalized_rating"]) == 0 and np.mean(df["normalized_rating"]) > 25:
+            x_25 = 20
+        else:
+            x_25 = (np.mean(df["normalized_rating"]) - min(df["normalized_rating"])) / 2
+        y_75 = (
+            np.mean(df["normalized_total_reviews"])
+            + (
+                max(df["normalized_total_reviews"])
+                - np.mean(df["normalized_total_reviews"])
+            )
+            / 2
+        )
+        y_25 = min(df["normalized_total_reviews"])
 
-    # Add quadrant text
-    fig.add_annotation(x=x_75, y=y_75, text="Deservedly Popular", showarrow=False)
-    fig.add_annotation(x=x_75, y=y_25, text="Hidden Gems", showarrow=False)
-    fig.add_annotation(x=x_25, y=y_75, text="Overrated", showarrow=False)
-    fig.add_annotation(x=x_25, y=y_25, text="Not Worth It", showarrow=False)
+        # Add quadrant text
+        fig.add_annotation(x=x_75, y=y_75, text="Deservedly Popular", showarrow=False)
+        fig.add_annotation(x=x_75, y=y_25, text="Hidden Gems", showarrow=False)
+        fig.add_annotation(x=x_25, y=y_75, text="Overrated", showarrow=False)
+        fig.add_annotation(x=x_25, y=y_25, text="Not Worth It", showarrow=False)
 
     # Clean
     fig.update_layout(
