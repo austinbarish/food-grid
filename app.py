@@ -377,6 +377,7 @@ def create_grid(
                     "url",
                     "score",
                 ],
+                labels={"main_category": "Category"},
                 # text='name'
             )
 
@@ -515,9 +516,7 @@ def server(input, output, session):
         df_filtered["Categories"] = df_filtered["Categories"].str.join(", ")
 
         # Sort by normalized rating, normalized review count
-        df_filtered = df_filtered.sort_values(
-            by=["Normalized Rating", "Normalized Total Reviews"], ascending=False
-        )
+        df_filtered = df_filtered.sort_values(by="Score", ascending=False)
 
         return df_filtered
 
