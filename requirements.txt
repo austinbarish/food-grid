@@ -1,0 +1,13 @@
+pandas
+numpy
+requests
+json
+time
+plotly
+seaborn
+shiny
+shinywidgets
+shinyswatch
+ast
+sklearn
+math
