@@ -10,7 +10,7 @@
 
 The data was collected using the [Yelp API](https://www.yelp.com/developers) to collect all of the restaurants in DC. Any business not found on Yelp is not included in the dataset. Using those locations, I then used the [Google Places API](https://developers.google.com/places/web-service/intro) to collect the ratings and review counts for each restaurant by searching for "{restaurant name} DC" and selecting the first results. These are then combined into a single dataset with an inner join on the restaurant name. The reviews are then totalled and an average rating is calculated using:
 
-$\text{Average Rating} = \frac{(\text{Google Rating} * \text{Google Review Count}) + (\text{Yelp Rating} * \text{Yelp Review Count})}{\text{Google Review Count} + \text{Yelp Review Count}}$
+$$\text{Average Rating} = \frac{(\text{Google Rating} * \text{Google Review Count}) + (\text{Yelp Rating} * \text{Yelp Review Count})}{\text{Google Review Count} + \text{Yelp Review Count}}$$
 
 These are then normalized and scaled to be between 0 and 100. Finally, the top 48 main categories, as listed on google, are kept. If a restaurants main category is not in the Top 48, its other category listing are checked and, if any of them are in the top 48, they are kept. Otherwise, the restaurant is listed under "Other". 
 
@@ -20,13 +20,13 @@ All of the data is stored on [Github](./data/dc_reviews_cleaned.csv).
 
 I have included a metric title "Score" that seeks to combine popularity and rating into one number. The formula is as follows:
 
-$\text{df["score"]} = \left(\text{df["normalized rating"]} \times 10\right) \times \left(\frac{\text{df["normalized total reviews"]}}{100}\right)$
+$$\text{df["score"]} = \left(\text{df["normalized rating"]} \times 10\right) \times \left(\frac{\text{df["normalized total reviews"]}}{100}\right)$$
 
-$\text{df["score"]} = \begin{cases} 0 & \text{if } \text{df["score"]} = 0 \\\ln(\text{df["score"]} + 1) & \text{otherwise} \end{cases}$
+$$\text{df["score"]} = \begin{cases} 0 & \text{if } \text{df["score"]} = 0 \\\ln(\text{df["score"]} + 1) & \text{otherwise} \end{cases}$$
 
-$\text{df["score"]} = \text{scaler.fit(df["score"])} \times 100$
+$$\text{df["score"]} = \text{scaler.fit(df["score"])} \times 100$$
 
-$\text{df["score"]} = \text{df["score"].round(2)}$
+$$\text{df["score"]} = \text{df["score"].round(2)}$$
 
 This gives a range of scores between 0 and 100, with 100 being the best score. This score is intended to be a recommendation of places to go. For example, if you are new to the area and want to check out the "best" spots, you are likely looking for a combination of the most population places that are deserving of their popularity. This score is intended to capture that.
 
