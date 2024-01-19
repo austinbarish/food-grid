@@ -42,7 +42,7 @@ restaurants_dict = {restaurant: restaurant for restaurant in restaurants}
 
 # App UI
 app_ui = ui.page_fluid(
-    shinyswatch.theme.cerulean(),
+    shinyswatch.theme.pulse(),
     ui.panel_title(
         "DC Restaurant Grid",
         window_title="DC Restaurant Grid",
@@ -78,18 +78,21 @@ app_ui = ui.page_fluid(
                 multiple=True,
                 selected="All Categories",
             ),
-            # ui.input_selectize(
-            #     "categories",
-            #     "Select Categories",
-            #     choices=categories,
-            #     multiple=True,
-            #     selected="All Categories",
-            # ),
             ui.input_selectize(
                 "restaurant_highlighter",
                 "Highlight Restaurant(s)",
                 choices=restaurants_dict,
                 multiple=True,
+            ),
+            ui.input_radio_buttons(
+                "coloring",
+                "Data Coloring:",
+                {
+                    "category": "By Category",
+                    "price": "By Price",
+                    "score": "By Total Score",
+                },
+                selected="category",
             ),
             ui.input_action_button(id="refresh", label="Refresh", class_="btn-success"),
             ui.input_switch(id="dt_switch", label="Show Data Table"),
@@ -137,7 +140,6 @@ def data_filterer(
     review_range=[0, 100],
     prices=["$", "$$", "$$$", "$$$$"],
     main_category=["All Categories"],
-    # categories=["All Categories"],
 ):
     # Filter the dataframe by rating and review count
     df = df[
@@ -159,7 +161,49 @@ def data_filterer(
     if "All Categories" not in main_category:
         df = df[df.main_category.isin(main_category)]
 
+    # Sort by main category so it is alphabetical
+    df = df.sort_values(by=["main_category"])
+
+    from sklearn.preprocessing import MinMaxScaler
+    import math
+
+    # Calculate raw score
+    df["score"] = (df["normalized_rating"] * 10) * (
+        df["normalized_total_reviews"] / 100
+    )
+
+    # Apply logarithmic transformation to score
+    df["score"] = df["score"].apply(lambda x: 0 if x == 0 else math.log(x + 1))
+
+    # Use MinMaxScaler for normalization
+    scaler = MinMaxScaler()
+    df["score"] = scaler.fit_transform(df[["score"]]) * 100
+
+    # Round the score
+    df["score"] = df["score"].round(2)
+
     return df
+
+
+def error_plot():
+    template = go.layout.Template()
+    template.layout.annotations = [
+        dict(
+            name="draft watermark",
+            text="No Restaurants Found<br>Please Try Adjusting Filters",
+            opacity=0.4,
+            font=dict(color="red", size=50),
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+        )
+    ]
+
+    fig = go.Figure()
+    fig.update_layout(template=template)
+    return fig
 
 
 # Function to create plot
@@ -170,7 +214,7 @@ def create_grid(
     review_range=[0, 100],
     prices=["$", "$$", "$$$", "$$$$"],
     main_category=["All Categories"],
-    # categories=["All Categories"],
+    coloring="category",
     highlighted_restaurants=[],
 ):
     # Filter the data
@@ -180,46 +224,32 @@ def create_grid(
         review_range,
         prices,
         main_category,
-        # categories=input.categories(),
     )
 
     # Check to make sure there are restaurants left
     if len(df) == 0:
-        draft_template = go.layout.Template()
-        draft_template.layout.annotations = [
-            dict(
-                name="draft watermark",
-                text="No Restaurants Found<br>Please Try Adjusting Filters",
-                opacity=0.4,
-                font=dict(color="red", size=50),
-                xref="paper",
-                yref="paper",
-                x=0.5,
-                y=0.5,
-                showarrow=False,
-            )
-        ]
-
-        fig = go.Figure()
-        fig.update_layout(template=draft_template)
-        return fig
+        return error_plot()
 
     # Find averages for quadrant lines
     x_avg = df["normalized_rating"].mean()
     y_avg = df["normalized_total_reviews"].mean()
 
-    # Check if highlighted restaurants is empty
+    # Check if highlighted restaurants is empty and if so, give error plot
     if list(highlighted_restaurants) != []:
-        # Create Color Map for Highlighted Restaurants
-        df["Highlighted"] = [
-            name if name in highlighted_restaurants else "Other" for name in df.name
-        ]
-        highlighted_color_map = {
-            name: "red" for name in enumerate(df.Highlighted.unique())
-        }
+        try:
+            # Create Color Map for Highlighted Restaurants
+            df["Highlighted"] = [
+                name if name in highlighted_restaurants else "Other" for name in df.name
+            ]
+            highlighted_color_map = {
+                name: "highlight" for name in enumerate(df.Highlighted.unique())
+            }
 
-        # Change Other to Gray
-        highlighted_color_map["Other"] = "gray"
+            # Change Other to Gray
+            highlighted_color_map["Other"] = "gray"
+
+        except:
+            return error_plot()
 
         # Create Scatter
         fig = px.scatter(
@@ -240,60 +270,94 @@ def create_grid(
             labels={"main_category": "Category"},
             # text='name'
         )
+
     else:
-        # Create Scatter
-        fig = px.scatter(
-            df,
-            x="normalized_rating",
-            y="normalized_total_reviews",
-            color="main_category",
-            color_discrete_map=color_map,
-            hover_name="name",
-            custom_data=[
-                "name",
-                "price",
-                "average_rating",
-                "rounded_normalized_rating",
-                "total_reviews",
-                "url",
-            ],
-            labels={"main_category": "Category"},
-            # text='name'
-        )
+        if coloring == "price":
+            price_color_map = {
+                "$": px.colors.qualitative.Light24[8],  # Green
+                "$$": px.colors.qualitative.Light24[6],  # Yellow
+                "$$$": px.colors.qualitative.Light24[7],  # Orange
+                "$$$$": px.colors.qualitative.Light24[0],  # Red
+            }
+
+            # Create Scatter
+            fig = px.scatter(
+                df,
+                x="normalized_rating",
+                y="normalized_total_reviews",
+                color="price",
+                color_discrete_map=price_color_map,
+                hover_name="name",
+                custom_data=[
+                    "name",
+                    "price",
+                    "average_rating",
+                    "rounded_normalized_rating",
+                    "total_reviews",
+                    "url",
+                    "score",
+                ],
+                labels={"price": "Price"},
+                # text='name'
+            )
+
+        elif coloring == "score":
+            # Create Scatter
+            fig = px.scatter(
+                df,
+                x="normalized_rating",
+                y="normalized_total_reviews",
+                color="score",
+                color_continuous_scale="RdYlGn",
+                hover_name="name",
+                custom_data=[
+                    "name",
+                    "price",
+                    "average_rating",
+                    "rounded_normalized_rating",
+                    "total_reviews",
+                    "url",
+                    "score",
+                ],
+                labels={
+                    "score": "<b>Score</b> <br>Normalized Log of Normalized Review Count * Normalized Rating"
+                },
+                # text='name'
+            )
+
+            # Move colorbar to the right
+            fig.update_layout(coloraxis_colorbar=dict(title_side="right"))
+
+        else:
+            # Create Scatter
+            fig = px.scatter(
+                df,
+                x="normalized_rating",
+                y="normalized_total_reviews",
+                color="main_category",
+                color_discrete_map=color_map,
+                hover_name="name",
+                custom_data=[
+                    "name",
+                    "price",
+                    "average_rating",
+                    "rounded_normalized_rating",
+                    "total_reviews",
+                    "url",
+                    "score",
+                ],
+                labels={"main_category": "Category"},
+                # text='name'
+            )
 
     # Update the hover template to include only 'name' and 'price'
     fig.update_traces(
-        hovertemplate="<b><a href='%{customdata[5]}' style='text-decoration: underline; color: inherit;'>%{hovertext}</a></b><br>Price: %{customdata[1]}<br>Rating: %{customdata[2]:.2f}<br>Normalized Rating: %{customdata[3]}<br>Review Count: %{customdata[4]:,}"
+        hovertemplate="<b><a href='%{customdata[5]}' style='text-decoration: underline; color: inherit;'>%{hovertext}</a></b><br>Price: %{customdata[1]}<br>Rating: %{customdata[2]:.2f}<br>Normalized Rating: %{customdata[3]}<br>Review Count: %{customdata[4]:,}<br>Score: %{customdata[6]:.2f}"
     )
 
     # Add quadrant Lines
     fig.add_vline(x=x_avg, line_width=1, opacity=0.5)
     fig.add_hline(y=y_avg, line_width=1, opacity=0.5)
-
-    # category_options = [
-    #     {
-    #         "label": "All Restaurants",
-    #         "method": "update",
-    #         "args": [
-    #             {"visible": [True] * len(df)},
-    #             {"title.text": "DC Restaurant Grid - All Restaurants"},
-    #         ],
-    #     }
-    # ]
-
-    # if categories != ["All Categories"]:
-    #     for category in categories:
-    #         category_bools = df["main_category"] == category
-    #         category_options += [
-    #             {
-    #                 "label": category,
-    #                 "method": "update",
-    #                 "args": [
-    #                     {"visible": category_bools},
-    #                     {"title.text": f"DC Restaurant Grid - Category: {category}"},
-    #                 ],
-    #             }
-    #         ]
 
     # Find midpoints for quadrants
     x_75 = max(df["normalized_rating"]) * 0.9
@@ -309,7 +373,7 @@ def create_grid(
 
     # Clean
     fig.update_layout(
-        template="plotly_white",
+        template="plotly",
         xaxis_title="<b>Normalized Rating</b>",
         yaxis_title="<b>Popularity Score</b>  <br>Normalized Review Count",
         height=700,
@@ -337,8 +401,8 @@ def server(input, output, session):
             review_range=input.review_count_range(),
             prices=input.price(),
             main_category=input.main_category(),
-            # categories=input.categories(),
             highlighted_restaurants=input.restaurant_highlighter(),
+            coloring=input.coloring(),
         )
         return fig
 
@@ -373,6 +437,7 @@ def server(input, output, session):
                 "rounded_normalized_rating",
                 "total_reviews",
                 "rounded_normalized_total_reviews",
+                "score",
             ]
         ]
 
