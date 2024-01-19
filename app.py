@@ -169,7 +169,7 @@ def data_filterer(
         # Filter the dataframe by price
         df = df[df.price_code.isin(prices_codes)]
 
-        if "All Categories" not in main_category:
+        if "All Categories" not in main_category and list(main_category) != []:
             df = df[df.main_category.isin(main_category)]
 
         # Sort by main category so it is alphabetical
@@ -377,14 +377,14 @@ def create_grid(
                     "url",
                     "score",
                 ],
-                labels={"main_category": "Category"},
                 # text='name'
             )
 
     # Update the hover template to include only 'name' and 'price'
     fig.update_traces(
-        hovertemplate="<b>%{hovertext}</b><br>Price: %{customdata[1]}<br>Rating: %{customdata[2]:.2f}<br>Normalized Rating: %{customdata[3]}<br>Review Count: %{customdata[4]:,}<br>Score: %{customdata[6]:.2f}"
+        hovertemplate="<b><a href='%{customdata[5]}' style='text-decoration: underline; color: inherit;'>%{hovertext}</a></b><br>Price: %{customdata[1]}<br>Rating: %{customdata[2]:.2f}<br>Normalized Rating: %{customdata[3]}<br>Review Count: %{customdata[4]:,}<br>Score: %{customdata[6]:.2f}"
     )
+    fig.update_layout(hovermode="closest", hoverdistance=10000)
 
     # Add quadrant lines and text if there are enough restaurants
     if len(df) > 4:
@@ -392,31 +392,40 @@ def create_grid(
         fig.add_vline(x=x_avg, line_width=1, opacity=0.5)
         fig.add_hline(y=y_avg, line_width=1, opacity=0.5)
 
-        # Find midpoints for quadrants
-        # Not actual 75th and 25th percentiles; modified for better visualization
-        x_75 = (
-            np.mean(df["normalized_rating"])
-            + (max(df["normalized_rating"]) - np.mean(df["normalized_rating"])) / 2
-        )
-        if min(df["normalized_rating"]) == 0 and np.mean(df["normalized_rating"]) > 25:
-            x_25 = 20
-        else:
-            x_25 = (np.mean(df["normalized_rating"]) - min(df["normalized_rating"])) / 2
-        y_75 = (
-            np.mean(df["normalized_total_reviews"])
-            + (
-                max(df["normalized_total_reviews"])
-                - np.mean(df["normalized_total_reviews"])
+        # If there are restaurant above and below a 50 on both x axis, include the text
+        if min(df["normalized_rating"]) < 50 and max(df["normalized_rating"]) > 50:
+            # Find midpoints for quadrants
+            # Not actual 75th and 25th percentiles; modified for better visualization
+            x_75 = (
+                np.mean(df["normalized_rating"])
+                + (max(df["normalized_rating"]) - np.mean(df["normalized_rating"])) / 2
             )
-            / 2
-        )
-        y_25 = min(df["normalized_total_reviews"])
+            if (
+                min(df["normalized_rating"]) == 0
+                and np.mean(df["normalized_rating"]) > 25
+            ):
+                x_25 = 20
+            else:
+                x_25 = (
+                    np.mean(df["normalized_rating"]) - min(df["normalized_rating"])
+                ) / 2
+            y_75 = (
+                np.mean(df["normalized_total_reviews"])
+                + (
+                    max(df["normalized_total_reviews"])
+                    - np.mean(df["normalized_total_reviews"])
+                )
+                / 2
+            )
+            y_25 = min(df["normalized_total_reviews"])
 
-        # Add quadrant text
-        fig.add_annotation(x=x_75, y=y_75, text="Deservedly Popular", showarrow=False)
-        fig.add_annotation(x=x_75, y=y_25, text="Hidden Gems", showarrow=False)
-        fig.add_annotation(x=x_25, y=y_75, text="Overrated", showarrow=False)
-        fig.add_annotation(x=x_25, y=y_25, text="Not Worth It", showarrow=False)
+            # Add quadrant text
+            fig.add_annotation(
+                x=x_75, y=y_75, text="Deservedly Popular", showarrow=False
+            )
+            fig.add_annotation(x=x_75, y=y_25, text="Hidden Gems", showarrow=False)
+            fig.add_annotation(x=x_25, y=y_75, text="Overrated", showarrow=False)
+            fig.add_annotation(x=x_25, y=y_25, text="Not Worth It", showarrow=False)
 
     # Clean
     fig.update_layout(
