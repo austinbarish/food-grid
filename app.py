@@ -20,7 +20,7 @@ df = pd.read_csv(
 
 # Create Color Map
 # Done outside the function to remain consistent
-colors = px.colors.qualitative.Alphabet
+colors = px.colors.qualitative.Light24
 color_map = {cat: colors[i] for i, cat in enumerate(df.main_category.unique())}
 
 # Create a dict of all the categories
